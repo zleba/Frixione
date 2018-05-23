@@ -1,0 +1,8 @@
+*.sv1
+*.o
+*.top
+MAINHD
+MAINPH
+*.swp
+hdjetlog
+phjetlog

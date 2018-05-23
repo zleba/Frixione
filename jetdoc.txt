@@ -1,0 +1,1627 @@
+****************************************************************************
+*                                                                          *
+*            Documentation file for the jet production package:            *
+*                hadron-hadron and photon-hadron collisions;               *
+*                    heavy-ion collisions also included                    *
+*                                                                          *
+*                   Stefano Frixione and Giovanni Ridolfi                  *
+*                                                                          *
+*         Comments and questions are welcome: please send them to          *
+*                                                                          *
+*                        Stefano.Frixione@cern.ch                          *
+*                                                                          *
+****************************************************************************
+
+   In this file, we describe how to use the FORTRAN programs that
+calculate jet hadro- and photoproduction cross sections at the 
+next-to-leading order in QCD. For a description of the formalism, see
+(please quote these two papers when referring to the codes)
+
+[1]  S. Frixione, Z. Kunszt and A. Signer, Nucl. Phys. B467(96)399.
+[2]  S. Frixione, Nucl. Phys. B507(97)295.
+
+For a phenomenological study of jet photoproduction at HERA, see
+
+[3]  S. Frixione and G. Ridolfi, Nucl. Phys. B507(97)315.
+
+Some parts of this package (integration and histogramming codes,
+utility codes) have been developed for the work of refs.
+
+[4]  M. Mangano, P. Nason, G. Ridolfi, Nucl. Phys. B373(92)295.
+[5]  S. Frixione, M. Mangano, P. Nason, G. Ridolfi, Nucl. Phys. B412(94)225.
+
+   Photon-hadron cross sections are usually written as a sum of two
+contributions: the pointlike (or direct) photon cross section (pointlike 
+component), due to subprocesses in which the photon directly interacts 
+with the parton of the hadron, and the hadronic (or resolved) photon cross 
+section (hadronic component), due to subprocesses in which the photon 
+fluctuates into hadronic states whose partons eventually collide with 
+the hadron.
+
+   We emphasise that the hadronic photon cross section IS a hadron-hadron
+cross section. Thus, in what follows the information relevant to the hadronic
+component of the photoproduction cross section are also relevant to the
+cross section in hadron-hadron collisions, such as those at the Tevatron
+or at the LHC. The ONLY difference between the two processes is in the 
+parton densities of the colliding beams, that are provided in input to the
+codes by the user.
+
+   We also point out that the hadroproduction code can compute jet cross
+sections per nucleon in heavy ion collisions. This implies the use of
+appropriate scattering beams, and parton densities that include nuclear
+effects, that are included in the parton density library of the present code.
+
+   In order to easily deal with the variety of processes described above,
+we have written two separate programs, which separately evaluate the 
+pointlike and the hadronic components. We stress anyway that only their 
+sum is physically meaningful in photoproduction reactions. The codes are:
+
+    PHYJETDIFF.FOR       driver (pointlike)
+    PHYJETCRS.FOR        cross section formulae (pointlike)
+
+    HDYJETDIFF.FOR       driver (hadronic)
+    HDYJETCRS.FOR        cross section formulae (hadronic)
+
+    YJETUSER.FOR         user analysis routines
+
+    JETINT.FOR           integration package, histogram handling package
+    JETPDF.FOR           parton densities package
+    ELPDF_GRV.FOR        parton densities (electron)
+    ELPDF_LAC1.FOR       parton densities (electron)
+    DFLM.FOR             DFLM parton densities
+    JETPDFLIB.FOR        interface with the parton densities package
+                         maintained by CERN (PDFLIB)
+    JETELGEN.FOR         produces the grid for parton densities in
+                         the electron (see below for details)
+    JETUTI.FOR           if you cannot link to the CERNLIB, this file contains
+                         all the CERNLIB functions you need for this program
+    LINUX.FOR            system dependent routines: LINUX version, 
+                         to be linked when running on a vax
+    VAX.FOR              system dependent routines: VAX version, 
+                         to be linked when running on a vax
+    AVI.FOR              system dependent routines: Avion UNIX, to be 
+                         linked when running on a Avion machine
+    SUN.FOR              system dependent routines: SUN version, to be 
+                         linked when running on a Sun machine
+    AIX.FOR              system dependent routines
+    TRAPFPE.C            utility file, only used when running under LINUX
+    DUMMY.FOR            dummy routines
+
+   The user interested in heavy-ion collision will also need the 
+following codes:
+
+    HDYJETDIFF_NUC.FOR   driver; to be used in place of HDYJETDIFF.FOR
+    JETPDF_NUC.FOR       parton densities package; to be used in place 
+                         of JETPDF.FOR
+    JETPDFLIB_NUC.FOR    interface with the parton densities package; to 
+                         be used in place of JETPDFLIB.FOR
+
+   The user should be mainly interested in the file YJETUSER.FOR, which
+he can modify at will to suit his needs. The file is fully commented,
+and the user is strongly advised to read it carefully. From now on,
+YJETUSER.FOR will be denoted as "userfile". In particular, the user
+should check the following issues. The subroutines
+
+  INIJET
+  TOPOUT
+
+are used for the bookkeeping of the histograms (the package has a
+self-contained histogramming package rather similar to HBOOK).
+In the subroutine
+
+  OUTFUN
+
+the user must perform all the operations needed to carry out his
+analysis. That means the jet-finding algorithm, the implementation
+of the kinematical cuts and the filling of the histograms. Explicit
+examples are given in YJETUSER.FOR. Finally, the function
+
+  ZGMU2
+
+sets the mass scales (factorization and renormalization scales,
+Weizsaecker-Williams and Ellis-Sexton scales) needed in the 
+computation, and evaluates alpha_strong. The user defines a
+default scale MU0, by using a partonic kinematics (basically,
+the transverse momenta of the final-state partons; any physically
+meaningful expression for this scale must be invariant under
+longitudinal boosts). In addition, he can select a scale factor to
+multiply MU0 by: MU0 -> SCF * MU0 for the renormalization and
+factorization scales. The value of SCF is requested by the program 
+during the initial interactive talk-to (see below). The Ellis-Sexton
+scale, which the physical results are exactly independent of, is set
+equal to the factorization scale. The Weizsaecker-Williams scale
+is usually determined by kinematical constraints (see ref.[3]),
+and must be set by the user in the function ZGMU2. This scale is
+irrelevant in hadron-hadron processes, but it is relevant in the
+hadronic component of the photoproduction processes.
+
+   The remaining files can be regarded as black boxes. In the 
+following, we will briefly explain their meaning, when needed.
+JETPDF.FOR, ELPDF_GRV.FOR and ELPDF_LAC1.FOR contain various partonic 
+distribution functions for nucleons, photons and electrons; by 'parton 
+density in an electron' we mean the convolution of the Weizsaecker-Williams
+function with a given distribution function for the photon. More details
+on this issue will be given below.
+
+   The user who wants to use HMRS (CTEQ4/5) parton densities needs the data
+files *MRS*.DAT (CTEQ4/5*.TBL). They have to sit in the directory where the 
+executable is run (otherwise, a logical name for them can be defined,
+pointing to the directory where they are stored). The extensions (.DAT
+and .TBL) of these files must be inserted when running on a VMS system.
+In UNIX they have to be removed; furthermore, *MRS* must be written with
+uppercase characters, CTEQ4/5* with lowercase characters (sorry, but we
+didn't want to modify the authors' original fortran codes).
+
+
+       -------------------------------------------------------
+       ----------------------- Running -----------------------
+       -------------------------------------------------------
+
+
+   The executables can be created by linking the following files
+
+POINTLIKE:   YJETUSER,PHYJETDIFF,PHYJETCRS,
+             JETINT,JETUTI,JETPDF,'SYSDEP'
+
+for the pointlike component,
+
+HADRONIC:    YJETUSER,HDYJETDIFF,HDYJETCRS,
+             JETINT,JETUTI,JETPDF,ELPDF_GRV,'SYSDEP'
+
+for the hadronic component, and
+
+HI:          YJETUSER,HDYJETDIFF_NUC,HDYJETCRS,
+             JETINT,JETUTI,JETPDF,JETPDF_NUC,'SYSDEP'
+
+for heavy-ion collisions. Here we assume that all the files sit in the same 
+directory. The file 'SYSDEP' can be either VAX, SUN, AVI,...., depending
+upon the machine the user is running on. If the user wants to use the DFLM 
+densities, also DFLM has to be linked. If the user wants to use LAC1 
+densities in the electron, ELPDF_LAC1 must be linked as well (ELPDF_GRV 
+can either be eliminated or kept). When creating the executables by linking
+the files we listed above, the link command will generate warning
+messages on VMS systems, and error messages on UNIX systems, due to the
+fact that some routines, called by JETPDF, are not linked (the typical
+example is DFLM, which is a very big, and rather obsolete file, which
+is better not to link unless one wants to use DFLM parton densities).
+In this case, the user can find a dummy version of the routines which will
+not be called during a run in DUMMY.FOR; by extracting from this file the 
+appropriate routines and linking them to the files listed above, the warning 
+messages in VMS and the error messages in UNIX will disappear. Notice that
+the file ELPDF_GRV (or any other electron density routines) are irrelevant
+in the hadronic component when hadron-hadron collisions are considered:
+the routine it contains is never called by the program.
+
+   We provide a GNU Makefile that creates the executables mentioned above.
+It is rather robust, but all system-dependent features cannot be taken into
+account. Thus, the user may need to modify it to suit his needs.
+
+   We now give simple examples of running the programs. As already stressed,
+the hadronic component in photoproduction is fully equivalent to a hadron-
+hadron cross section. However, those users not interested in photoproduction
+physics may find it unnecessary to learn some details which are only 
+relevant to the beam setup specific to photoproduction. This is especially
+true if one uses this code in order to study heavy-ion collisions. Therefore
+we shall give separate examples, one for hadron-hadron collisions, one
+for heavy-ion collisions, and one for photon-hadron collisions (including 
+the hadronic component). We start with the case of hadron-hadron collisions.
+
+
+       -------------------------------------------------------
+       -------------- Hadron-hadron collisions ---------------
+       -------------------------------------------------------
+
+
+   Having created the executable for the hadronic component, we now run it.
+In the default output device (the screen when running in interactive mode,
+the log file when running a batch) the program prints:
+
+  Enter id. string (eg. 'test') for this run (< 81 characters)
+
+Here the user must enter a string, whose length does not exceed 80
+characters, which "identifies" the run; it will be written on the
+output default device at the end of the run, and in the files written
+by the integration routine we use (see below). It can be used
+as a cross-check of the correctness of the input procedure, in the
+case of several runs. For example, when computing jet hadroproduction
+at the LHC p-p collisions, one may enter
+
+  'pp collisions, E_cm=14 TeV'
+
+Then the program prints
+
+  Enter 1 if you want restart files and topdrawer file
+
+This is relevant for the output of the run. Enter 
+
+  1
+
+Then the program prints
+
+  Enter prefix for name of generated files (< 11 chars.)
+
+At the end of the run, the program will write the histograms defined
+by the user in a file different from the default output device, which we
+will call result file. Furthermore, during the run several files are
+written by the integration routine (which we will call save files).
+The user is requested to enter a string, whose length does not exceed 
+10 characters, which will be used as a prefix for the name of the
+result file and of the save files. In this example, we use
+
+  'RUN1'
+
+The program prints now
+
+  Enter E_cm, scf, E_T(min) sequence, where:
+  E_cm=CM energy of the colliding particles (in GeV),
+  scf=mu_fac/mu_0=mu_ren/mu_0,
+  E_T(min)=minimum transverse energy (in GeV).
+  mu_0 is the reference scale, set in the user file.
+  Enter all the entries < 0 to end the sequence
+
+Here the user has to enter the center-of-mass energy of the colliding
+system, a scale factor (scf), and the minimum of the sum of the
+transverse energies of the partons produced in the hard collision.
+For p-p collisions at the LHC, E_cm is 14 TeV. The scale factor
+scf is the ratio of the factorization scale chosen for the run over
+a default scale, which is set by the user in the userfile. In this 
+version of the program, the factorization scale is also equal to the 
+renormalization scale. Finally, E_T(min) gives a lower bound on the
+observed transverse energies. If the user wants to plot two-jet
+observables, and the two jets are required to have transverse energy
+larger than ET_1 and ET_2, then one must choose E_T(min)=ET_1+ET_2.
+If, one the other hand, single inclusive variables are plotted,
+and the observed jet has transverse energy larger than ET,
+the choice E_T(min)=3*ET/2 has to be made. If, for example,
+we are dealing with p-p collisions at the LHC, and we consider two-jet
+production with ET_1=20 GeV and ET_2=25 GeV, making a default choice
+of scale, then we enter
+
+  14000 1 45
+
+The program now waits until another set of three numbers is entered.
+This is useful if the user wants for example to change the scale with
+respect to the previous choice. One may consider, as customary in
+QCD, to set the scale to half and twice the default value.
+In this case, one enters
+
+  14000 0.5 45
+  14000 2 45
+
+This sequence of inputs can continue up to 100 input lines. In practice,
+it is not convenient to have more than two or three input lines, since
+to every line corresponds a different computation of the jet cross
+section, which can take some time. After having entered all the input
+parameters needed, one can end the sequence by entering
+
+  -1 -1 -1
+
+The program now prints
+
+  Enter number of flavours
+
+This is the number of light flavours involved in the hard scattering
+processes. Usually, depending on the energy range considered,
+one enters
+
+  5
+
+or 4. Then the program prints
+
+  Enter beam type for beam1 and beam2:
+  for ELECTRO- or PHOTOPRODUCTION, enter the
+  electron or the photon as BEAM1
+  (0=(p+n)/2, 1=p, -1=pbar, 2=n, -2=nbar, 4=photon, 5=elect)
+
+At the LHC, where protons collide with protons, enter
+
+  1 1
+
+Now the program prints
+
+  Enter parton distribution set for the nucleons
+     (< 0 for a display of the features of the various sets)
+
+Each parton density set provided in this package is identified with
+an integer number. To see who is who, enter
+
+  -1
+
+and a long list of parton density sets available will appear on
+the screen. At the end of the list (which we do not report in this
+file because of its length), it appears again
+
+  Enter parton distribution set for the hadron 
+     (< 0 for a display of the features of the various sets)
+
+At this point, by checking the list, the user will be able to select
+the parton density sets he prefers. For example, entering
+
+  71
+
+the set MRSA' is selected. The program goes on and prints
+
+  Enter lambda_QCD_5, 0 for default
+  Notice: this lambda MUST BE the one for FIVE FLAVOURS,
+  regardless of the number of active flavours nl given
+  before. Alpha_QCD will be correctly calculated with
+  nl flavours
+
+The built-in parton density package provides the correct value of
+Lambda_QCD(5 flavours) associated with the chosen parton density set.
+If the user wants to use this value when calculating alpha_strong
+during the run (this option is very strongly recommended), he
+has to enter 
+
+  0
+
+The program then will print on the default output device the corresponding
+value. In the case of MRSA', 
+
+  Lambda_5=  0.152000000000000     GeV
+  Scheme=MS
+ 
+will appear. If the user does not enter 0 when requested to enter 
+Lambda_QCD(5 flavours), then he has to provide the program with a reasonable
+value for this quantity (in GeV). We remark that this value will be
+used in the computation of alpha_strong entering the partonic cross 
+sections, while the alpha_strong value entering the parton densities 
+is fixed by the authors of the set used. This choice therefore introduces
+an inconsistency in the calculation, which however may be acceptable
+in some cases. The program also prints the subtraction scheme in which
+the parton densities are defined. The partonic cross sections must be
+computed in the same scheme, which is automatically done by the program;
+the information on the scheme thus just serves as a cross check to the user.
+The program goes on and prints
+
+  Select the allowed partonic processes:
+                NLO             LO
+  enter 1 for 0 --> 5g        0 --> 4g
+  enter 2 for 0 --> 3g2q      0 --> 2g2q
+  enter 3 for 0 --> 1g2q2Q    0 --> 2q2Q
+  enter 4 for 0 --> 1g4q      0 --> 4q
+  enter 0 to select all the processes
+  enter -1 to exclude 5g, -2 to exclude 3g2q and so on
+
+The QCD calculations for the hadroproduction of one- or two-jet
+inclusive quantities are performed in terms of the (unphysical) partonic
+subprocesses listed above (NLO means next-to-leading order, LO means
+leading order - that is, Born contribution. Here with next-to-leading
+order we mean just the contribution of the class of diagrams of order
+alpha_strong^3, while leading order indicates the contribution
+of the diagrams of order alpha_strong^2. Therefore, to get a 
+perturbative result accurate to next-to-leading order in the usual sense,
+one must consider both the next-to-leading order and leading order 
+contributions in this program). For example, from the unphysical 
+process 0 --> 1g4q, one constructs the physical processes
+g+q --> q+q+qb, q+qb --> q+qb+g, and so on, which contribute to the jet
+cross section. The user can therefore decide whether to keep all
+the partonic subprocesses, or just some of them. Although the physical
+result, to be compared with data, requires the contribution of all
+the partonic subprocesses, this option is useful to disentangle
+the contributions of the single partonic subprocesses. In the present
+example, we want a physical result and therefore we enter
+
+  0
+
+The program then prints
+
+  Select the allowed initial states:
+  enter 1 for gg, 2 for qg, 3 for qqbar
+        4 for qq, 5 for qQbar, 6 for qQ
+  enter 0 to select all the initial states
+  enter -1 to exclude gg, -2 to exclude qg and so on
+
+As in the case of the partonic processes, the user can keep
+all the possible combinations of incoming partons, or just some
+of them. This is useful when one wants to check the contribution
+of a given parton luminosity. Also, when this option is combined
+with the previous one, relevant for the unphysical partonic subprocesses,
+the user can select only the physical partonic subprocesses he
+wants to include in the calculation. In the present example,
+we want a physical result and therefore we enter
+
+  0
+
+Now the program prints
+
+  Enter number of iterations
+
+  if you enter a number of iterations n>0
+  the program will execute n iterations
+  if n<0, it will execute iterations until
+  total number of iterations performed = abs(n)
+  (it makes a difference only if in restart mode)
+
+  n1 and n2 for LO and NLO contribution
+
+For each of the perturbative QCD contributions (Born and NLO), the program 
+asks how many iterations the user wants to generate. These iterations refer 
+to VEGAS iterations, VEGAS being the routine developed by G. Lepage to perform 
+multidimensional integrals (G.P. Lepage, J.of Comp. Phys. 27(78)192). 
+For the Born contribution of the order of 4-5 iterations are usually 
+sufficient to provide reasonably smooth distributions, while for the NLO 
+contribution several tens of iterations are sometimes needed, depending 
+on the histograms which are being plotted. In this example we enter
+
+  5 10
+
+and therefore the program will perform 5 iterations for the leading order
+contribution and 10 iterations for the next-to-leading order one.
+The program now prints
+
+  enter 0 to exclude,1 for new run, 2 to restart
+  3 to restart keeping the grid but reset histo's 
+  10 to produce ASCII save files from standard ones
+  11 to produce standard save files from ASCII ones
+  (10/11 used to transport save files across machines)
+
+  i1 and i2 for LO and NLO contribution
+
+If the user is familiar with Vegas these lines will appear to
+be clear to him. At the end of each iteration Vegas will automatically write 
+the files (save files) containing all of the information on the histograms 
+accumulated till then, as well as the Vegas grid (which is needed
+since Vegas adapts its grid iteration by iteration). In case
+the run is stopped or crashes (due for example to insufficient CPU
+time), or in case the distributions don't look smooth enough, a new run
+can be started using all of the information accumulated until that stage 
+and stored in the files mentioned above. These options are controlled by
+the parameter the user is requested to enter here. If 0 is entered,
+Vegas will not perform the integration, even if a number of iterations # 0
+was previously selected. If 1 is entered, a new run will be started;
+notice that this implies that the statistics accumulated during previous
+runs (if any) will be lost. If 2 or 3 is entered, Vegas reads the save
+files written during a previous run; if no run was previously performed,
+the program stops. Otherwise, the program will perform the number of
+iteration specified above, but "keeping in mind" the results
+accumulated till then. The difference between 2 and 3 is that, by
+entering 2, the program keeps both the grid and the histograms
+filled in the previous runs; by entering 3, the grid is kept but
+the histograms are removed and filled only with the points of the
+current run. Finally, the options 10 and 11 are just used to transport
+the save files across machines. They must be used in conjunction with
+a number of iterations set to 0. In the present example, since
+we start a new run, we enter
+
+  1 1
+
+The first entry refers to the leading order contribution, the second
+entry refers to the next-to-leading order one.
+Finally, as the last input line, the program writes
+
+  Enter number of calls for vegas ncl2,ncl3,<0 for defaults
+
+which corresponds to the number of points per iteration used by Vegas
+to perform the integration. The user is strongly advised to use the
+default values, that is to enter
+
+  -1 -1
+
+The program now starts running. If the user performed the previous 
+operations in interactive mode, he will want to stop the run and to
+restart it as a non-interactive run. To this purpose, at this stage
+the program has written, in the same directory where the executable
+is stored, a file called HDJETLOG.DAT (in a UNIX system, the extension
+.DAT is suppressed and the name of the file is written with lowercase 
+characters). With the example given above, this file would read
+
+'pp collisions, E_cm=14 TeV'
+1                                ! 1 for restart and .top files
+'RUN1'  ! prefix for files
+0.1400D+05 0.1000D+01 0.4500D+02 ! energy, scalefactor, E_T(min)
+0.1400D+05 0.5000D+00 0.4500D+02
+0.1400D+05 0.2000D+01 0.4500D+02
+-.1000D+01 -.1000D+01 -.1000D+01
+ 5                               ! # of flavours
+ 1  1                            ! Hadron types
+  71                             ! PDF set for nucleon
+0.0000D+00                       ! Lambda_5, 0 for default
+ 0                               ! 1=5g,2=3g2q,3=1g2q2Q,4=1g4q,0=all
+ 0                               ! 1=gg,2=qg,3=qqbar,4=qq,5=qQbar,6=qQ,0=all
+   5   10                        ! # of iterations
+ 1  1                            ! 0 to exclude, 1 for new run, 2 to restart
+    80000    400000              ! # of calls for vegas
+
+It is clear that this file can be used as an input file in order to
+run the program in a non-interactive mode. 
+
+Suppose now that this run has been performed; the histograms are
+stored into three files, RUN11HDJET.TOP, RUN12HDJET.TOP, RUN13HDJET.TOP.
+RUN1 is the prefix we entered in the command file; then the program
+appends to this prefix an integer number, which corresponds to a
+given set of (E_cm,scf,E_T(min)). In this example, RUN11HDJET.TOP is
+relevant for (E_cm,scf,E_T(min))=(14000,1,45), RUN12HDJET.TOP for
+(14000,0.5,45) and RUN13HDJET.TOP for (14000,2,45). Finally, the program
+appends the string HDJET, to distinguish this output from the analogous
+one of the pointlike component (see below). The extension .TOP means
+that the output files are ready to be viewed with TOPDRAWER, which is
+a (free) graphics package provided by SLAC. Even if the user does not
+have a Topdrawer driver, he may directly look at the histograms
+inside the files, whose form is self-evident. In the case of a
+single input line for (E_cm,scf,E_T(min)), the program does not
+append "1" at the end of the prefix chosen. In the example above,
+if only the input line 
+
+0.1400D+05 0.1000D+01 0.4500D+02 ! energy, scalefactor, E_T(min)
+
+had been inserted, the output would have been the file RUN1HDJET.TOP.
+If the statistics accumulated in the histograms is not sufficient, the
+user can simply run again the program, using the above lines as input, 
+except for 
+
+   5   10                        ! # of iterations
+ 1  1                            ! 0 to exclude, 1 for new run, 2 to restart
+
+which have to be substituted with 
+
+   5   10                        ! # of iterations
+ 2  2                            ! 0 to exclude, 1 for new run, 2 to restart
+
+In this way, the program will perform five (ten) more iterations for
+the leading order (next-to-leading order) contribution, keeping the
+statistics accumulated before. One can also use the following
+input (which is suggested)
+
+ -10  -20                        ! # of iterations
+ 2  2                            ! 0 to exclude, 1 for new run, 2 to restart
+
+In this way, the program will perform a total number of ten (twenty)
+iterations for the leading order (next-to-leading order) contribution
+(total means that this number of iterations is the sum of the number
+of iterations performed during the first and the second run).
+By construction, the two last inputs are equivalent, given the fact
+that during the first run five and ten iterations have been performed.
+But the form with negative numbers as input is preferable, since
+allows a better cross check of the statistics actually used to 
+produce a histogram (this is really useful when the program is 
+restarted several times, due for example to crashes of the system).
+
+One may want to use a set of parton densities which is not included 
+in our PDF package (JETPDF.FOR). In this case, an interface
+(JETPDFLIB.FOR) with CERN PDFLIB is provided. If the user chooses this
+option (which is not recommended, unless strictly necessary; the
+program is in general faster when using our PDF package, for the same
+choice of parton densities), the executable must be created by linking
+the following files (which is done automatically if you use the
+Makefile provided -- read the instructions contained in that file)
+
+HADRONIC:    YJETUSER,HDYJETDIFF,HDYJETCRS,
+             JETINT,JETUTI,JETPDFLIB,'SYSDEP'
+             'your local version of pdflib'
+
+The parton density sets are still identified with an integer number,
+but this number is different from the one relevant for the version of
+the program which uses our PDF package. In the case of PDFLIB, the
+number the user must enter can be read from the PDFLIB manual. The 
+relevant information are given by the parameters NGROUP and NSET.
+The user has to evaluate N=1000*NGROUP+NSET, and enter the number N
+in input. Notice that this procedure unambiguously identifies
+the parton density set, unless a single group of authors produces
+more than 999 sets. If we refer again to our previous sample run,
+with our PDF package we selected the set MRSA' by using
+
+ 71                              ! PDF set for the hadron
+
+If we now want the same result, but using CERN PDFLIB, the previous
+line has to be substituted with
+
+ 3039                            ! PDF set for the hadron
+
+Indeed, the set MRSA' is given, in PDFLIB, as 
+(NGROUP,NSET)=(3,39) ==> N=1000*3+39=3039 (the set (NGROUP,NSET)=(3,40)
+is not exactly the same we have in our package, since it is the fitted
+form). The user may want to verify that, by using our PDF package
+with N=71, or PDFLIB package with N=3039, the jet cross sections
+he wants to calculate are the same (actually, the are small numerical
+differences, usually in the fourth digit or beyond; these are due to
+the fact that our PDF package returns the densities with a real*4
+precision, while PDFLIB returns them with real*8 precision; it is
+clear that this difference is completely immaterial when considering
+physical results). After the set number has been entered, the program
+asks for the Lambda_QCD value to be used, as before. PDFLIB returns
+this value, and thus entering 0 here the user will use the Lambda_QCD
+value attached to the chosen density set, according to PDFLIB.
+Unfortunately, quite often the value of Lambda returned in this 
+way is not accurate, owing to improper information stored in PDFLIB.
+When in doubt, always refer to the original paper where the parton
+densities are given. One should consider the value of alpha_strong 
+used in fitting the parton densities, and then calculate the value
+of Lambda_QCD(5 flavours) to be given in input to the program.
+When using the PDFLIB package, one has also to remember that PDFLIB
+does not provide the user with the information on the subtraction
+scheme relevant for the densities chosen. The correct scheme has
+therefore to be given in input by the user. After asking for the
+Lambda_QCD value, the program prints
+
+  Enter scheme: 'DI' or 'MS'
+
+The user can check on PDFLIB manual what is the correct scheme for
+the density set chosen. In the case of MRSA', he must enter
+
+  'MS'
+
+This feature, which is not present when linking to our PDF package,
+produces an additional line in the file HDJETLOG.DAT, namely
+
+'MS'                             ! Scheme
+
+This is consistent with the fact that this information is requested
+in input by the driver program when it is linked to PDFLIB.
+A final remark concerns the value of Lambda_QCD. Although PDFLIB
+gives this information (and therefore the user can choose the
+option "0" for the default), sometimes the value returned is
+not completely accurate. 
+
+
+       -------------------------------------------------------
+       ---------------- Heavy-ion collisions -----------------
+       -------------------------------------------------------
+
+
+   The heavy ion collision case is in fact almost identical to that
+of the hadron-hadron collision case, since this code is only capable of
+computing nucleon-nucleon cross sections. Any information on the geometry
+of the collisions (such as T_{AB}(b)) must be provided by the user, 
+and it is NOT included in this code. In the example, we therefore only
+stress the differences with respect to the standard hadron-hadron run
+given above. The executable can be created as described at the beginning
+of this documentation file.
+
+   The first three input lines are the same as before. One may want
+to give a string identifying the run peculiar of heavy-ion collisions;
+in this example, we consider Pb-Pb collisions at the LHC, and thus we enter
+
+  'PbPb collisions, E_cm=5.5 TeV'
+
+The program then goes on as before, up to the point where it asks to
+input the collision energy. In the case of nuclear collisions, we have
+a structure different from the previous one. Namely, the program prints
+
+  Enter E_beam1, E_beam2, scf, E_T(min) sequence, where:
+  E_beam1=lab energy of the incoming left beam (in GeV),
+  E_beam2=lab energy of the incoming right beam (in GeV),
+  scf=mu_fac/mu_0=mu_ren/mu_0,
+  E_T(min)=minimum transverse energy (in GeV).
+  mu_0 is the reference scale, set in the user file.
+  Enter all the entries < 0 to end the sequence
+
+Here, the user does not enter the center-of-mass energy any longer,
+but the two beam energies (given in the lab frame). This is because
+with this code one can also consider hadron-ion collisions, in which
+case it is useful to be able to enter asymmetric beam energies; the
+relevant boost (from the hadron c.m. frame to the lab frame) is computed
+by the code. We enter, similarly to what done before
+
+  2750 2750 1 45
+  2750 2750 0.5 45
+  2750 2750 2 45
+  -1 -1 -1 -1
+
+We now proceed as before. Notice that when the program asks for the
+beam type, it now prints
+
+  Enter beam type for beam1 and beam2:
+  (0=(p+n)/2, 1=p, -1=pbar, 2=n, -2=nbar)
+
+Here, since we are dealing with Pb-Pb collisions, we enter
+
+  0 0
+
+Then the program prints
+
+  Enter A1 and A2 for incoming beams
+
+and we enter
+
+  208 208
+
+The program now asks for the numbers that identify parton density sets.
+Here, we talk about sets, and not set, because nuclear parton densities
+are usually given as f_A(x)=R_A(x)*f_p(x), where f_p are the proton
+(or, in general, the free-nucleon densities), and R_A is a suitable
+factor, which accounts for phenomena such as shadowing, antishadowing,
+and so on. The user is requested here to make a choice for R_A and
+for f_p. The program in fact prints
+
+  Enter set number for nuclear and free particle PDFs;
+  negative entries result in printouts of the lists
+  of available sets
+
+The nuclear set number is the one which identifies R_A, and the free
+particle one identifies f_p. The latter is the same as before. The former,
+on the other hand, is peculiar of heavy-ion collisions. By entering either
+number smaller than zero, the program will print a list of the available
+sets. In the case of f_p, this list coincides with the one mentioned before
+in hadron-hadron collisions. In the case of R_A, only one set is available
+at present, EKS98, whose id number is 2. If one enters 1 as id number for
+R_A, the code sets R_A=1; in this way, one can cross check the results 
+of the heavy-ion code against those obtained with the hadron-hadron
+code, provided that the other inputs are identical. In this example,
+we enter
+
+  2 71
+
+which means that we use EKS98 for R_A, and MRSA' for f_p, as before.
+The program now proceeds asking input in the same way as before. Eventually,
+the file HDJETLOG.DAT will read as follows
+
+'PbPb collisions, E_cm=5.5 TeV'
+1                                ! 1 for restart and .top files
+'RUN1'  ! prefix for files
+0.2750D+04 0.2750D+04 0.1000D+01 0.4500D+02 ! E_b1, E_b2, scalefactor, E_T(min)
+0.2750D+04 0.2750D+04 0.5000D+00 0.4500D+02 
+0.2750D+04 0.2750D+04 0.2000D+01 0.4500D+02 
+-.1000D+01 -.1000D+01 -.1000D+01 -.1000D+01
+ 5                               ! # of flavours
+ 0  0                            ! Hadron types
+0.2080D+03 0.2080D+03            ! A1, A2
+   2   71                        ! PDF sets (nuclei, free particles)
+0.0000D+00                       ! Lambda_5, 0 for default
+ 0                               ! 1=5g,2=3g2q,3=1g2q2Q,4=1g4q,0=all
+ 0                               ! 1=gg,2=qg,3=qqbar,4=qq,5=qQbar,6=qQ,0=all
+   5   10                        ! # of iterations
+ 1  1                            ! 0 to exclude, 1 for new run, 2 to restart
+    80000    400000              ! # of calls for vegas
+
+   As in the case of hadron-hadron collisions, it is possible to get the
+nuclear densities from PDFLIB. In this case, the executable is created
+by linking
+
+HI:          YJETUSER,HDYJETDIFF_NUC,HDYJETCRS,
+             JETINT,JETUTI,JETPDFLIB_NUC,'SYSDEP'
+             'your local version of pdflib'
+
+as can be read from the Makefile. The only differences with respect to
+the example presented here are, as in the case of hadron-hadron collisions,
+relevant to the parton density set numbers. As before, the user has to
+enter NA=1000*NAGROUP+NASET and N=1000*NGROUP+NSET as id numbers for
+R_A and f_p respectively. The input of Lambda_QCD, and of the subtraction
+scheme, follow the same rules as before.
+
+
+       -------------------------------------------------------
+       -------------- Photon-hadron collisions ---------------
+       -------------------------------------------------------
+
+
+   We described in turn the cases of the pointlike and of the hadronic
+components.
+
+     ******************* Pointlike component ******************* 
+
+In the default output device (the screen when running in interactive mode,
+the log file when running a batch) the program prints:
+
+  Enter id. string (eg. 'test') for this run (< 81 characters)
+
+Here the user must enter a string, whose length does not exceed 80
+characters, which "identifies" the run; it will be written on the
+output default device at the end of the run, and in the files written
+by the integration routine we use (see below). It can be used
+as a cross-check of the correctness of the input procedure, in the
+case of several runs. For example, when computing jet photoproduction
+at HERA in e-p collisions in the Weizsaecker-Williams approximation,
+one may enter
+
+  'ep collisions, E_cm=300 GeV, pointlike component'
+
+Then the program prints
+
+  Enter 1 if you want restart files and topdrawer file
+
+This is relevant for the output of the run. Enter 
+
+  1
+
+Then the program prints
+
+  Enter prefix for name of generated files (< 11 chars.)
+
+At the end of the run, the program will write the histograms defined
+by the user in a file different from the default output device, which we
+will call result file. Furthermore, during the run several files are
+written by the integration routine (which we will call save files).
+The user is requested to enter a string, whose length does not exceed 
+10 characters, which will be used as a prefix for the name of the
+result file and of the save files. In this example, we use
+
+  'RUN1'
+
+The program prints now
+
+  Enter E_cm, scf, E_T(min) sequence, where:
+  E_cm=CM energy of the colliding particles (in GeV),
+  scf=mu_fac/mu_0=mu_ren/mu_0,
+  E_T(min)=minimum transverse energy (in GeV).
+  mu_0 is the reference scale, set in the user file.
+  Enter all the entries < 0 to end the sequence
+
+Here the user has to enter the center-of-mass energy of the colliding
+system, a scale factor (scf), and the minimum of the sum of the
+transverse energies of the partons produced in the hard collision.
+For e-p collisions at HERA, E_cm is presently 300 GeV. The scale factor
+scf is the ratio of the factorization scale chosen for the run over
+a default scale, which is set by the user in the userfile. In this 
+version of the program, the factorization scale is also equal to the 
+renormalization scale. Finally, E_T(min) gives a lower bound on the
+observed transverse energies. If the user wants to plot two-jet
+observables, and the two jets are required to have transverse energy
+larger than ET_1 and ET_2, then one must choose E_T(min)=ET_1+ET_2.
+If, one the other hand, single inclusive variables are plotted,
+and the observed jet has transverse energy larger than ET,
+the choice E_T(min)=3*ET/2 has to be made. If, for example,
+we are dealing with e-p collisions at HERA, and we consider two-jet
+production with ET_1=10 GeV and ET_2=15 GeV, making a default choice
+of scale, then we enter
+
+  300 1 25
+
+The program now waits until another set of three numbers is entered.
+This is useful if the user wants for example to change the scale with
+respect to the previous choice. One may consider, as customary in
+QCD, to set the scale to half and twice the default value.
+In this case, one enters
+
+  300 .5 25
+  300 2 25
+
+This sequence of inputs can continue up to 100 input lines. In practice,
+it is not convenient to have more than two or three input lines, since
+to every line corresponds a different computation of the jet cross
+section, which can take some time. After having entered all the input
+parameters needed, one can end the sequence by entering
+
+  -1 -1 -1
+
+The program now prints
+
+  Enter number of flavours
+
+This is the number of light flavours involved in the hard scattering
+processes. Usually, depending on the energy range considered,
+one enters
+
+  4
+
+or 5. Then the program prints
+
+  Enter hadron type
+  (0=(p+n)/2, 1=p, -1=pbar)
+
+At HERA, where electrons collide with protons, enter
+
+  1
+
+Now the program prints
+
+  Enter parton distribution set for the hadron 
+     (< 0 for a display of the features of the various sets)
+
+Each parton density set provided in this package is identified with
+an integer number. To see who is who, enter
+
+  -1
+
+and a long list of parton density sets available will appear on
+the screen. At the end of the list (which we do not report in this
+file because of its length), it appears again
+
+  Enter parton distribution set for the hadron 
+     (< 0 for a display of the features of the various sets)
+
+At this point, by checking the list, the user will be able to select
+the parton density sets he prefers. For example, entering
+
+  71
+
+the set MRSA' is selected. The program goes on and prints
+
+  Enter lambda_QCD_5, 0 for default
+  Notice: this lambda MUST BE the one for FIVE FLAVOURS,
+  regardless of the number of active flavours nl given
+  before. Alpha_QCD will be correctly calculated with
+  nl flavours
+
+The built-in parton density package provides the correct value of
+Lambda_QCD(5 flavours) associated with the chosen parton density set.
+If the user wants to use this value when calculating alpha_strong
+during the run (this option is very strongly recommended), he
+has to enter 
+
+  0
+
+The program then will print on the default output device the corresponding
+value. In the case of MRSA', 
+
+  Lambda_5=  0.152000000000000     GeV
+
+will appear. If the user does not enter 0 when requested to enter 
+Lambda_QCD(5 flavours), then he has to provide the program with a reasonable
+value for this quantity (in GeV). We remark that this value will be
+used in the computation of alpha_strong entering the partonic cross sections,
+while the alpha_strong value entering the parton densities is fixed
+by the authors of the set used. This choice therefore introduces
+an inconsistency in the calculation, which however may be acceptable
+in some cases.
+The program then prints
+
+  Enter now scheme for photon: 'DI' or 'MS'
+  (use DI when the PDFs in the photon in the hadronic
+  component are defined in the DIS_gamma scheme, MS otherwise)
+
+This scheme choice is dictated by the scheme of the parton densities
+of the photon which enter the hadronic component. If those densities
+are defined in the DIS_gamma scheme, introduced by Glueck, Reya and Vogt, 
+then one must enter here
+
+   'DI'
+
+and 'MS' otherwise. In practice, the only set presently available
+which is defined in the DIS_gamma scheme is GRV-HO(gamma). The
+program now prints on the default output device
+
+  Scheme for hadron=MS
+  Scheme for photon=DI
+
+as a cross check for the schemes relevant for the proton and photon
+legs (notice that the scheme for the proton leg has been set automatically
+by the program; this is done when a specific parton density set for
+the proton - in our case, MRSA' - is chosen).
+The program now prints
+
+  Enter 0 to compute the cross sections with a monochromatic
+  photon beam, enter 1 to use the photon distribution function
+  in the user file
+
+Although the hard part of the pointlike component of the jet photoproduction
+cross section always involves a photon, the photon itself can be thought
+as part of a broad-band beam, or as a monochromatic object. In the 
+former case, the distribution in energy of the photon beam has to
+be provided by the user. At HERA, this distribution in energy coincides
+with the Weizsaecker-Williams function, which has to be written by
+the user in the userfile (it is not fixed once and forever because
+several forms of the Weizsaecker-Williams function are presently available,
+and the user can choose the one he prefers. See 
+
+[6] S. Frixione, M. Mangano, P. Nason, G. Ridolfi, Phys. Lett. B319(93)339
+
+for a detailed discussion on this point). In the present example,
+we consider e-p collisions in the Weizsaecker-Williams approximation,
+and therefore we enter 
+
+  1
+
+The program goes on and prints
+
+  Select the allowed partonic processes:
+                NLO             LO
+  enter 1 for 0 --> 1p2g2q    0 --> 1p1g2q
+  enter 2 for 0 --> 1p2q2Q                
+  enter 3 for 0 --> 1p4q                  
+  enter 0 to select all the processes
+  enter -1 to exclude 1p2g2q, and so on
+
+The QCD calculations for the pointlike photoproduction of one- or two-jet
+inclusive quantities are performed in terms of the (unphysical) partonic
+subprocesses listed above (NLO means next-to-leading order, LO means
+leading order - that is, Born contribution. Here with next-to-leading
+order we mean just the contribution of the class of diagrams of order
+alpha_em*alpha_strong^2, while leading order indicates the contribution
+of the diagrams of order alpha_em*alpha_strong. Therefore, to get a 
+perturbative result accurate to next-to-leading order in the usual sense,
+one must consider both the next-to-leading order and leading order 
+contributions in this program). For example, from the unphysical 
+process 0 --> 1p2g2q, one constructs the physical processes
+p+g --> q+qb+g and p+q --> q+g+g, which contribute to the jet
+cross section. The user can therefore decide whether to keep all
+the partonic subprocesses, or just some of them. Although the physical
+result, to be compared with data, requires the contribution of all
+the partonic subprocesses, this option is useful to disentangle
+the contributions of the single partonic subprocesses. In the present
+example, we want a physical result and therefore we enter
+
+  0
+
+The program then prints
+
+  Select the allowed initial states:
+  enter 1 for pg, 2 for pq
+  enter 0 to select all the initial states
+  enter -1 to exclude pg, -2 to exclude pq
+
+As in the case of the partonic processes, the user can keep
+all the possible combinations of incoming partons, or just some
+of them. This is useful when one wants to check the contribution
+of a given parton luminosity. Also, when this option is combined
+with the previous one, relevant for the unphysical partonic subprocesses,
+the user can select only the physical partonic subprocesses he
+wants to include in the calculation. In the present example,
+we want a physical result and therefore we enter
+
+  0
+
+Now the program prints
+
+  Enter number of iterations
+
+  if you enter a number of iterations n>0
+  the program will execute n iterations
+  if n<0, it will execute iterations until
+  total number of iterations performed = abs(n)
+  (it makes a difference only if in restart mode)
+
+  n1 and n2 for LO and NLO contribution
+
+For each of the perturbative QCD contributions (Born and NLO), the program 
+asks how many iterations the user wants to generate. These iterations refer 
+to VEGAS iterations, VEGAS being the routine developed by G. Lepage to perform 
+multidimensional integrals (G.P. Lepage, J.of Comp. Phys. 27(78)192). 
+For the Born contribution of the order of 4-5 iterations are usually 
+sufficient to provide reasonably smooth distributions, while for the NLO 
+contribution several tens of iterations are sometimes needed, depending 
+on the histograms which are being plotted. In this example we enter
+
+  5 10
+
+and therefore the program will perform 5 iterations for the leading order
+contribution and 10 iterations for the next-to-leading order one.
+The program now prints
+
+  enter 0 to exclude,1 for new run, 2 to restart
+  3 to restart keeping the grid but reset histo's 
+  10 to produce ASCII save files from standard ones
+  11 to produce standard save files from ASCII ones
+  (10/11 used to transport save files across machines)
+
+  i1 and i2 for LO and NLO contribution
+
+If the user is familiar with Vegas these lines will appear to
+be clear to him. At the end of each iteration Vegas will automatically write 
+the files (save files) containing all of the information on the histograms 
+accumulated till then, as well as the Vegas grid (which is needed
+since Vegas adapts its grid iteration by iteration). In case
+the run is stopped or crashes (due for example to insufficient CPU
+time), or in case the distributions don't look smooth enough, a new run
+can be started using all of the information accumulated until that stage 
+and stored in the files mentioned above. These options are controlled by
+the parameter the user is requested to enter here. If 0 is entered,
+Vegas will not perform the integration, even if a number of iterations # 0
+was previously selected. If 1 is entered, a new run will be started;
+notice that this implies that the statistics accumulated during previous
+runs (if any) will be lost. If 2 or 3 is entered, Vegas reads the save
+files written during a previous run; if no run was previously performed,
+the program stops. Otherwise, the program will perform the number of
+iteration specified above, but "keeping in mind" the results
+accumulated till then. The difference between 2 and 3 is that, by
+entering 2, the program keeps both the grid and the histograms
+filled in the previous runs; by entering 3, the grid is kept but
+the histograms are removed and filled only with the points of the
+current run. Finally, the options 10 and 11 are just used to transport
+the save files across machines. They must be used in conjunction with
+a number of iterations set to 0. In the present example, since
+we start a new run, we enter
+
+  1 1
+
+The first entry refers to the leading order contribution, the second
+entry refers to the next-to-leading order one.
+Finally, as the last input line, the program writes
+
+  Enter number of calls for vegas ncl2,ncl3,<0 for defaults
+
+which corresponds to the number of points per iteration used by Vegas
+to perform the integration. The user is strongly advised to use the
+default values, that is to enter
+
+  -1 -1
+
+The program now starts running. If the user performed the previous 
+operations in interactive mode, he will want to stop the run and to
+restart it as a non-interactive run. To this purpose, at this stage
+the program has written, in the same directory where the executable
+is stored, a file called PHJETLOG.DAT (in a UNIX system, the extension
+.DAT is suppressed and the name of the file is written with lowercase 
+characters). With the example given above, this file would read
+
+'ep collisions, E_cm=300 GeV, pointlike component'
+1                                ! 1 for restart and .top files
+'RUN1'  ! prefix for files
+0.3000D+03 0.1000D+01 0.2500D+02 ! energy, scalefactor, E_T(min)
+0.3000D+03 0.5000D+00 0.2500D+02
+0.3000D+03 0.2000D+01 0.2500D+02
+-.1000D+01 -.1000D+01 -.1000D+01
+ 4                               ! # of flavours
+ 1                               ! Hadron type
+ 71                              ! PDF set for the hadron
+0.0000D+00                       ! Lambda_5, 0 for default
+'DI'                             ! Scheme for photon
+1                                ! 0 for monochromatic photon, 1 for broad band
+ 0                               ! 1=1p2g2q,2=1p2q2Q,3=1p4q,0=all
+ 0                               ! 1=pg,2=pq,0=all
+   5   10                        ! # of iterations
+ 1  1                            ! 0 to exclude, 1 for new run, 2 to restart
+    80000    400000              ! # of calls for vegas
+
+It is clear that this file can be used as an input file in order to
+run the program in a non-interactive mode. 
+
+Suppose now that this run has been performed; the histograms are
+stored into three files, RUN11PHJET.TOP, RUN12PHJET.TOP, RUN13PHJET.TOP.
+RUN1 is the prefix we entered in the command file; then the program
+appends to this prefix an integer number, which corresponds to a
+given set of (E_cm,scf,E_T(min)). In this example, RUN11PHJET.TOP is
+relevant for (E_cm,scf,E_T(min))=(300,1,25), RUN12PHJET.TOP for
+(300,0.5,25) and RUN13PHJET.TOP for (300,2,25). Finally, the program
+appends the string PHJET, to distinguish this output from the analogous
+one of the hadronic component (see below). The extension .TOP means
+that the output files are ready to be viewed with TOPDRAWER, which is
+a (free) graphics package provided by SLAC. Even if the user do not
+have a Topdrawer driver, he may directly look at the histograms
+inside the files, whose form is self-evident. In the case of a
+single input line for (E_cm,scf,E_T(min)), the program does not
+append "1" at the end of the prefix chosen. In the example above,
+if only the input line 
+
+0.3000D+03 0.1000D+01 0.2500D+02 ! energy, scalefactor, E_T(min)
+
+had been inserted, the output would have been the file RUN1PHJET.TOP.
+If the statistics accumulated in the histograms is not sufficient, the
+user can simply run again the program, using the above lines as input, 
+except for 
+
+   5   10                        ! # of iterations
+ 1  1                            ! 0 to exclude, 1 for new run, 2 to restart
+
+which have to be substituted with 
+
+   5   10                        ! # of iterations
+ 2  2                            ! 0 to exclude, 1 for new run, 2 to restart
+
+In this way, the program will perform five (ten) more iterations for
+the leading order (next-to-leading order) contribution, keeping the
+statistics accumulated before. One can also use the following
+input (which is suggested)
+
+ -10  -20                        ! # of iterations
+ 2  2                            ! 0 to exclude, 1 for new run, 2 to restart
+
+In this way, the program will perform a total number of ten (twenty)
+iterations for the leading order (next-to-leading order) contribution
+(total means that this number of iterations is the sum of the number
+of iterations performed during the first and the second run).
+By construction, the two last inputs are equivalent, given the fact
+that during the first run five and ten iterations have been performed.
+But the form with negative numbers as input is preferable, since
+allows a better cross check of the statistics actually used to 
+produce a histogram (this is really useful when the program is 
+restarted several times, due for example to crashes of the system).
+
+Further comments are in order. If the user is interested in producing
+results for monochromatic photon-proton collisions, then the line
+
+1                                ! 0 for monochromatic photon, 1 for broad band
+
+has to be substituted with 
+
+0                                ! 0 for monochromatic photon, 1 for broad band
+
+At the same time, care must be paid to the fact that the photon is not
+as energetic as the electron, and therefore the center-of-mass energy
+of the colliding system will be lower than in the case of e-p
+collisions. If, for example, a photon of 14 GeV (in the lab frame)
+collides with a proton of 820 GeV (==> E_cm=214.29) then the lines
+
+0.3000D+03 0.1000D+01 0.2500D+02 ! energy, scalefactor, E_T(min)
+0.3000D+03 0.5000D+00 0.2500D+02
+0.3000D+03 0.2000D+01 0.2500D+02
+
+have to be substituted with 
+
+0.2143D+03 0.1000D+01 0.2500D+02 ! energy, scalefactor, E_T(min)
+0.2143D+03 0.5000D+00 0.2500D+02
+0.2143D+03 0.2000D+01 0.2500D+02
+
+Finally, one may want to use a set of parton densities which is not
+included in our PDF package (JETPDF.FOR). In this case, an interface
+(JETPDFLIB.FOR) with CERN PDFLIB is provided. If the user chooses this
+option (which is not recommended, unless strictly necessary; the
+program is in general faster when using our PDF package, for the same
+choice of parton densities), the executable must be created by linking
+the following files
+
+POINTLIKE:  YJETUSER,PHYJETDIFF,PHYJETCRS,
+            JETINT,JETUTI,JETPDFLIB,'SYSDEP',
+            'your local version of pdflib'
+
+The parton density sets are still identified with an integer number,
+but this number is different from the one relevant for the version of
+the program which uses our PDF package. In the case of PDFLIB, the
+number the user must enter can be read from the PDFLIB manual. The 
+relevant information are given by the parameters NGROUP and NSET.
+The user has to evaluate N=1000*NGROUP+NSET, and enter the number N
+in input. Notice that this procedure unambiguously identifies
+the parton density set, unless a single group of authors produces
+more than 999 sets. If we refer again to our previous sample run,
+with our PDF package we selected the set MRSA' by using
+
+ 71                              ! PDF set for the hadron
+
+If we now want the same result, but using CERN PDFLIB, the previous
+line has to be substituted with
+
+ 3039                            ! PDF set for the hadron
+
+Indeed, the set MRSA' is given, in PDFLIB, as 
+(NGROUP,NSET)=(3,39) ==> N=1000*3+39=3039 (the set (NGROUP,NSET)=(3,40)
+is not exactly the same we have in our package, since it is the fitted
+form). The user may want to verify that, by using our PDF package
+with N=71, or PDFLIB package with N=3039, the jet cross sections
+he wants to calculate are the same (actually, the are small numerical
+differences, usually in the fourth digit or beyond; these are due to
+the fact that our PDF package returns the densities with a real*4
+precision, while PDFLIB returns them with real*8 precision; it is
+clear that this difference is completely immaterial when considering
+physical results).
+When using the PDFLIB package, one has also to remember that PDFLIB 
+does not provide the user with the information on the subtraction
+scheme relevant for the densities chosen. The correct scheme has therefore
+to be given in input by the user. After asking for the Lambda_QCD
+value, the program prints
+
+  Enter now scheme for hadron: 'DI' or 'MS'
+
+The user can check on PDFLIB manual what is the correct scheme for
+the density set chosen. In the case of MRSA', he must enter
+
+  'MS'
+
+This feature, which is not present when linking to our PDF package,
+produces an additional line in the file PHJETLOG.DAT, namely
+
+'MS'                             ! Scheme for hadron
+
+This is consistent with the fact that this information is requested
+in input by the driver program when it is linked to PDFLIB.
+A final remark concerns the value of Lambda_QCD. Although PDFLIB
+gives this information (and therefore the user can choose the
+option "0" for the default), sometimes the value returned is
+not completely accurate. The user is therefore advised to check
+on the original publications for the value of alpha_strong used in
+fitting the parton densities, and then to calculate the value
+of Lambda_QCD(5 flavours) to be given in input to the program.
+
+
+     ******************* Hadronic component ******************* 
+
+
+   The running of the hadronic component is rather similar to the
+one of the pointlike component. In the following, we will only
+point out the differences between the two. The input of the
+identification strings, center-of-mass energy, scalefactors,
+E_T(min) and number of flavours is identical to the previous
+case. The main difference is found when the program asks for
+the colliding hadron types and the corresponding parton densities.
+Firstly, the program prints
+
+  Enter beam type for beam1 and beam2:
+  for ELECTRO- or PHOTOPRODUCTION, enter the
+  electron or the photon as BEAM1
+  (0=(p+n)/2, 1=p, -1=pbar, 4=photon, 5=elect)
+
+Here electroproduction simply means photoproduction in the
+Weizsaecker-Williams approximation, to distinguish it from the
+monochromatic photon-hadron interactions, which we denote
+by "photoproduction". Consistently with what done before,
+when we considered a broad-band beam of photons, we enter here
+
+  5 1
+
+We stress that, regardless of the HERA conventions, the incoming
+electron or photon MUST be entered as beam 1 (coming from the left).
+The program then prints
+
+  Enter parton distribution set for the nucleons
+     (< 0 for a display of the features of the various sets)
+
+This input line refers to the densities in the incoming proton.
+As before, we select the MRSA' set (we use our PDF package)
+by entering
+
+  71
+
+The program now prints
+
+  Enter parton distribution set for the electron
+     (< 0 for a display of the features of the various sets)
+
+By definition, the parton densities in the electron are defined
+as the convolution of the Weizsaecker-Williams function with a
+given set of parton densities in the photon. They are not provided
+by any author, since many forms of the Weizsaecker-Williams function
+can be used, and the integration range in the y variable is
+usually restricted in a way which is dependent upon the particular
+experimental analysis carried out. We have written a code
+(JETELGEN.FOR) which accepts in input a form of the 
+Weizsaecker-Williams function, the y integration range, and
+a set of parton densities in the photon, and gives in output
+the corresponding parton densities in the electron, in the form
+of an interpolating grid. We will comment in the following about 
+the use of this program. Here, it is enough to say that it
+produces a file which can be directly linked to the rest of the
+package, returning the desired parton densities in the electron.
+The files ELPDF_GRV.FOR and ELPDF_LAC1.FOR we mentioned at the
+beginning are examples of such files. When creating the executable,
+we linked the package to ELPDF_GRV.FOR, which contains the
+results of the convolution of the Weizsaecker-Williams function
+in a given form (see the file ELDPF_GRV.FOR for more details) with 
+the photon parton density set GRV-HO. Therefore, we enter 
+
+  52
+
+which corresponds to GRV-HO in the electron, as can be checked by
+entering -1 to ask for the list of available parton densities.
+This is just an example; in general, the user will produce its own
+version of parton densities. To eventually use these densities,
+he has to link the file EL_PDF.FOR, which is the output
+of JETELGEN.FOR, to the rest of the package (instead of, or together
+with, ELPDF_GRV.FOR), and then enter "53" instead of "52".
+The program then goes on and prints
+
+  Enter Lambda_QCD_5, < 0 for a list of default values
+
+if Lambda_QCD relevant for the proton set is different from Lambda_QCD
+for the photon or electron set. In this case, it is suggested to
+enter the value associated with the proton set. There are indications
+that the correlation between alpha_strong value and parton densities
+is stronger in the case of hadronic sets with respect to photon sets.
+Therefore, since we are using MRSA', we enter
+
+  0.152
+
+The rest of the enquiries for the input parameters is similar
+to the case of the pointlike component. The only difference is
+in the type of partonic subprocesses and initial states, which
+are different from the previous case since here no photon is
+entering the hard parton scattering. At the end of the input operations, 
+the program writes the file HDJETLOG.DAT, analogous to PHJETLOG.DAT, 
+which is meant to be eventually converted in an input file for
+a subsequent run. With our current example, we have
+
+'ep collisions, E_cm=300 GeV, hadronic component'
+1                                ! 1 for restart and .top files
+'RUN1'  ! prefix for files
+0.3000D+03 0.1000D+01 0.2500D+02 ! energy, scalefactor, E_T(min)
+0.3000D+03 0.5000D+00 0.2500D+02
+0.3000D+03 0.2000D+01 0.2500D+02
+-.1000D+01 -.1000D+01 -.1000D+01
+ 4                               ! # of flavours
+ 5  1                            ! Hadron types
+  71                             ! PDF set for nucleon
+  52                             ! PDF set for electron
+0.1520D+00                       ! Lambda_5, 0 for default
+ 0                               ! 1=5g,2=3g2q,3=1g2q2Q,4=1g4q,0=all
+ 0                               ! 1=gg,2=qg,3=qqbar,4=qq,5=qQbar,6=qQ,0=all
+   5   10                        ! # of iterations
+ 1  1                            ! 0 to exclude, 1 for new run, 2 to restart
+    80000    400000              ! # of calls for vegas
+
+When this run is performed, the program puts the output into the
+files RUN11HDJET.TOP, RUN12HDJET.TOP, RUN13HDJET.TOP, whose form
+and meaning are identical to the ones of the corresponding files
+for the pointlike component we described above.
+
+If the user wants to consider monochromatic photon-proton collisions,
+the line
+
+ 5  1                            ! Hadron types
+
+must be substituted with
+
+ 4  1                            ! Hadron types
+
+and the center-of-mass energy has to be modified accordingly,
+as discussed before. Again, the main difference arises when the
+codes are linked with CERN PDFLIB and not with our PDF package.
+The executable is generated by linking the following files
+
+HADRONIC: YJETUSER,HDYJETDIFF,HDYJETCRS,
+          JETINT,JETUTI,JETPDFLIB,ELPDF_GRV,'SYSDEP',
+          'your local version of pdflib'
+
+As before, the user has to check the PDFLIB manual to see which is
+the number corresponding to the density set he wants to use.
+We remark that PDFLIB does not contain any density set for the 
+electron. Therefore, even when linking to PDFLIB, the user should
+also link to the package the densities in the electron he has
+produced. The number corresponding to the desired electron set
+is identical to the one used in the case when our PDF package is
+used. This can be directly checked when the program prints
+
+  Enter parton distribution set for the electron
+     (< 0 for a display of the features of the various sets)
+
+and entering -1 to see the list of the densities available.
+As in the case of the pointlike component, since PDFLIB does not 
+provide with any information on the scheme associated to the parton
+densities, the user has to enter explicitly the schemes. In the current 
+version of the program, the schemes associated to the incoming hadron 
+and photon (or electron) legs are required to be identical. This is
+not a too restrictive condition; we remind that the GRV-HO set
+for photons (and therefore for electrons) is defined in the
+DIS_gamma scheme, but as far as the purely hadronic part is concerned
+this scheme is identical to the usual MSbar scheme. 
+Therefore, our previous example gets modified as follows:
+when the program asks for the densities in the proton
+
+  Enter parton distribution set for the nucleons
+     (< 0 for a display of the features of the various sets)
+
+we enter
+
+  3039
+
+When it asks for the densities in the electron
+
+  Enter parton distribution set for the electron
+     (< 0 for a display of the features of the various sets)
+
+we enter
+
+  52
+
+as before. Then, after enquiring for Lambda_QCD, the program prints
+
+  Enter scheme: 'DI' or 'MS'
+
+and we enter
+
+  'MS'
+
+since we are using MRSA' and GRV-HO(gamma).
+
+
+  ******************* Densities in the electron ******************* 
+
+
+   We now deal with the problem of building the parton densities
+in the electron. By definition, they are given by the convolution
+of the Weizsaecker-Williams function and a given set of 
+parton densities in the photon. The convolution is performed
+by the program JETELGEN. To get the relevant executable, link
+
+    JETELGEN,JETPDF
+
+or
+
+    JETELGEN,JETPDFLIB,'your local version of pdflib'
+
+In the former case, the user will extract the parton densities in the
+photon from our PDF package, while in the latter the user will use those
+contained in PDFLIB. 
+
+The program starts asking the user want kind of form of the 
+Weizsaecker-Williams function he prefers to use. In particular,
+the user may choose among the following forms:
+
+(0)  WW=K*(1+(1-x)**2)/x * log( q2eff*(1-x)/(xme*x)**2 )
+
+(1)  WW=K*( (1+(1-x)**2)/x * log( q2eff*(1-x)/(xme*x)**2 )
+     #      +2*xme2*x*( 1/q2eff-(1-x)/(xme*x)**2 ) )
+
+(2)  WW=K*( (1+(1-x)**2) / x * log( q2eff/(xme*x)**2 )
+     #      +2*(1-x) * ( xme2*x/q2eff - 1/x ) )
+     q2eff = xme2*x**2+e_e**2*(1-x)**2*thc**2
+
+where
+
+  xme=electron mass
+  xme2=xme^2
+  K=alpha_em/(2*pi)
+  e_e=energy of the incoming electron in the lab frame
+  thc=upper limit of the scattering angle in the lab frame (photoproduction
+      events correspond to small thc in our conventions)
+
+For a thorough discussion on these expressions, in particular on
+the use of the form (2), see ref. [6]. We recall that the non-logarithmic
+term, which is not present in (0), is relevant for jet production
+at HERA (see ref.[3]).
+
+   If the choice (1) is made, the program asks for the value of 
+q2eff to be used. This will be fixed in the computation of the
+electron parton densities. If the choice (2) is made, the program
+asks for the value of the incoming electron energy (e_e; with the
+present HERA configuration, e_e=27.5 GeV) and for the upper limit
+of the scattering angle (by using a forward tagger, thc=5.e-3; the
+value is expressed in radians). These values are fixed in the 
+computation of the electron parton densities. On the other hand,
+if the choice (0) is made, the value of q2eff is just a parameter,
+which can be provided by the user during the calculation of jet
+cross sections, through the function ZGMU2 in the userfile.
+
+   Once that the choice of the Weizsaecker-Williams function has been
+done, the program asks to define the integration range in the variable
+x_gamma, defined as
+
+  x_gamma=E_gamma/E_e
+
+that is the fraction of the energy of the incoming electron which is 
+carried out by the interacting photon. This variable is equivalent
+to the variable y defined in the experimental analysis; therefore,
+the cuts on y used to get a sizeable acceptance must be imposed
+as integration limits in the variable x_gamma.
+
+   Finally, the program asks for the parton density set in the photon
+which the user wants to convolute with the Weizsaecker-Williams 
+function. As described before, this set is identified by an integer
+number, whose value depends upon the PDF library (our PDF package or
+CERN PDFLIB) linked to JETELGEN.
+
+   The program now runs and produces the file EL_PDF.FOR, which 
+contains an interpolating grid for the parton densities in the
+electron as specified. The grid has the form of a subroutine
+(ELPDF_USER) which can be linked to the jet package as stated
+above. This is what is called "user defined electron density"
+in the list of the densities. It can be selected by entering
+the number 53. Eventually, the user may want to use another set
+of parton densities in the photon, or to use another form of
+the Weizsaecker-Williams function. By running again JETELGEN,
+he will get another file EL_PDF.FOR, containing the routine
+ELPDF_USER, which therefore supersedes the previous version.
+To avoid confusion, it is recommended to change the name of
+the file EL_PDF.FOR as soon as the run of JETELGEN is over.
+EL_PDF.FOR has at the very beginning few lines of comments which
+should help in identifying unambiguously its content.
+
+   The file ELPDF_GRV.FOR, which is given as a sample file for parton 
+densities in the electron, has been produced by typing the following 
+(JETELGEN was linked to our PDF package)
+
+enter 0 to use WW, log term only
+      1 to use WW, log and nonlog terms
+      2 to use WW, cut on angle
+1
+enter the effective WW scale in GeV (upper limit
+of the absolute value of the photon virtuality)
+.1
+enter 0 to integrate WW over 0<x_gamma<1
+      1 otherwise
+1
+enter x_gamma(min),x_gamma(max)
+.2 .8
+enter set # for photon, n<0 to list PDFs
+43
+
+The output file EL_PDF.FOR has been renamed to ELPDF_GRV.FOR and
+the subroutine name has been changed from ELPDF_USER to ELPDF_GRV.
+The same procedure has been applied in order to produce ELPDF_LAC1;
+the only difference is in the lines
+
+enter set # for photon, n<0 to list PDFs
+43
+
+which have been substituted with 
+
+enter set # for photon, n<0 to list PDFs
+44
+
+the number 44 corresponding to LAC1 set (43 is GRV in the conventions
+of our PDF package).
+
+   ******************* VERY IMPORTANT WARNING *******************
+   ******************* VERY IMPORTANT WARNING *******************
+   ******************* VERY IMPORTANT WARNING *******************
+
+As we stressed several times, the hadronic and the pointlike components
+are meaningless if taken separately at next-to-leading order in QCD.
+When running our codes, the input parameters must be the same for
+the two components; this means same center-of-mass energy, same
+scales, same E_T(min), same parton densities. In the case of e-p
+collisions in the Weizsaecker-Williams approximation, the pointlike
+component uses the form of the Weizsaecker-Williams function
+which is written in the user file, while the hadronic component
+uses the form which enters the parton densities of the electron
+whose construction we described above. The TWO FORMS MUST BE IDENTICAL;
+also, the range in x_gamma over which the integration is carried
+out must be the same. Before running, check very carefully that
+these two conditions are strictly fulfilled.

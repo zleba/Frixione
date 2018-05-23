@@ -1,0 +1,15 @@
+ 'fitb.y'
+ 1                                ! 1 for restart and .top files
+ 'thisF'                       ! prefix for files
+ 80.E0 0.1000E+01 0.9500E+01   ! Pomeron-Electron CM energy, scalefactor, E_T(min)
+ -.1000E+01 -.1000E+01 -.1000E+01
+  5                               ! # of flavours
+  4 1                             ! Photon type + Hadron type
+ 101                              ! PDF set for the hadron, negative for DPDFLib -1150 = fit2
+  42                              !PHOTON pdf
+ 0.228E+00                        ! Lambda_5, 0 for default
+  0                               ! 1=1p2g2q,2=1p2q2Q,3=1p4q,0=all
+  0                               ! 1=pg,2=pq,0=all
+  5    10                         ! # of iterations
+  1  1                            ! 0 to exclude, 1 for new run, 2 to restart
+ 10000       100000          ! # of calls for vegas 
