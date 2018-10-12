@@ -11,4 +11,4 @@ Run using
 ./MAINPH < PH.steer
 ```
 
-PH and HD denotes the direct and resolved component.
+PH and HD denote the direct and resolved component.
